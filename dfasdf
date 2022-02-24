@@ -1,0 +1,35 @@
+[33mcommit a8b72dc2702c3b77c16b76483e7471beb17afe3b[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: harimChoi <holly001503@gmail.com>
+Date:   Wed Feb 23 15:51:31 2022 +0900
+
+    test
+
+[33mcommit 68181a88fbb93e052fcad0996ca96cf94d695004[m
+Author: jennharw <73508138+jennharw@users.noreply.github.com>
+Date:   Tue Feb 22 18:46:37 2022 +0900
+
+    Create README.md
+
+[33mcommit b41b0af2cb28cdca47fd83d086b5f80a681ec3a0[m
+Author: jennharw <73508138+jennharw@users.noreply.github.com>
+Date:   Tue Feb 22 13:10:17 2022 +0900
+
+    Delete main/java/com/example/demo/config/secret directory
+
+[33mcommit 11e256f18139aeea5e967e3af146d730351db295[m
+Author: jennharw <73508138+jennharw@users.noreply.github.com>
+Date:   Tue Feb 22 13:09:59 2022 +0900
+
+    Delete AES128.java
+
+[33mcommit 27f01757425f8efdb138cc9a5262348938695774[m
+Author: jennharw <73508138+jennharw@users.noreply.github.com>
+Date:   Mon Feb 21 13:01:53 2022 +0900
+
+    Delete main/java/com/example/demo/board directory
+
+[33mcommit 11751364190f8f8767b3043d94b33a4f25a7f8cc[m
+Author: harimChoi <holly001503@gmail.com>
+Date:   Mon Feb 21 12:58:28 2022 +0900
+
+    initial commit

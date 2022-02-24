@@ -1,5 +1,7 @@
 package com.example.demo.config;
 
+import com.example.demo.user.service.UserDetailsServiceImpl;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -9,12 +11,14 @@ import org.springframework.security.config.annotation.web.WebSecurityConfigurer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -32,14 +36,31 @@ public class WebConfig extends WebSecurityConfigurerAdapter{
         return new BCryptPasswordEncoder();
     }
 
+
+    @Autowired
+    private UserDetailsServiceImpl userService;
+
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        CustomLoginFilter filter = new CustomLoginFilter(authenticationManager());
-        filter.setFilterProcessesUrl("/api/login");
+        JWTLoginFilter loginFilter = new JWTLoginFilter(authenticationManager());
+        JWTCheckFilter checkFilter = new JWTCheckFilter(authenticationManager(), userService);
+
+//        CustomLoginFilter filter = new CustomLoginFilter(authenticationManager());
+//        filter.setFilterProcessesUrl("/api/login");
 //
-        filter.setAuthenticationSuccessHandler(successHandler());
-        filter.setAuthenticationFailureHandler(failureHandler());
-        filter.afterPropertiesSet();
+//        filter.setAuthenticationSuccessHandler(successHandler());
+//        filter.setAuthenticationFailureHandler(failureHandler());
+//        filter.afterPropertiesSet();
+
+        http
+                .csrf().disable()
+                .sessionManagement(session->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                .addFilterAt(loginFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAt(checkFilter, BasicAuthenticationFilter.class)
+        ;
+
 
         http.csrf()
                .ignoringAntMatchers("/api/**");
@@ -51,14 +72,14 @@ public class WebConfig extends WebSecurityConfigurerAdapter{
                                 .antMatchers("/api/register").permitAll()
                                 .antMatchers(HttpMethod.GET,"/api/post").permitAll()
                                 .anyRequest().authenticated()
-                )
-                .formLogin()
-                    .loginProcessingUrl("/api/login")
-                .failureHandler(failureHandler())
-                .successHandler(successHandler())
-                .and()
-                .addFilterAt(filter, UsernamePasswordAuthenticationFilter.class)
-                .logout(logout->logout.logoutSuccessUrl("/"));
+                );
+//                .formLogin()
+//                    .loginProcessingUrl("/api/login")
+//                .failureHandler(failureHandler())
+//                .successHandler(successHandler())
+//                .and()
+//                .addFilterAt(filter, UsernamePasswordAuthenticationFilter.class)
+//                .logout(logout->logout.logoutSuccessUrl("/"));
 
 
 
