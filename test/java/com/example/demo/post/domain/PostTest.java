@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PostTest {
+    //JUnit 을 이용한 단위 테스트
     @Test
     @DisplayName("정상")
     void createPost_Normal() {
