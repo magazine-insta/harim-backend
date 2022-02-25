@@ -1,10 +1,12 @@
 package com.example.demo.config;
 
 import com.auth0.jwt.exceptions.TokenExpiredException;
+import com.example.demo.user.domain.User;
 import com.example.demo.user.domain.UserDetailsImpl;
 import com.example.demo.user.dto.LoginReq;
 import com.example.demo.user.service.UserDetailsServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.SneakyThrows;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,12 +22,13 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
+
 public class JWTLoginFilter extends UsernamePasswordAuthenticationFilter {
 
     private ObjectMapper objectMapper = new ObjectMapper();
     private UserDetailsServiceImpl userService;
 
-    public JWTLoginFilter(AuthenticationManager authenticationManager) {
+    public JWTLoginFilter(AuthenticationManager authenticationManager, UserDetailsServiceImpl userService) {
         super(authenticationManager);
         this.userService = userService;
         setFilterProcessesUrl("/api/login");
@@ -39,19 +42,26 @@ public class JWTLoginFilter extends UsernamePasswordAuthenticationFilter {
     {
         LoginReq userLogin = objectMapper.readValue(request.getInputStream(), LoginReq.class);
         if(userLogin.getRefreshToken() == null) {
+            UserDetailsImpl user = (UserDetailsImpl) userService.loadUserByUsername(userLogin.getUser_id());
+
+
             UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken(
-                    userLogin.getUser_id(), userLogin.getPassword(), null
+                    user, userLogin.getPassword(), null
             );
             // user details...
             return getAuthenticationManager().authenticate(token);
         }else{
             VerifyResult verify = JWTUtil.verify(userLogin.getRefreshToken());
             if(verify.isSuccess()){
-                UserDetailsImpl user = (UserDetailsImpl) userService.loadUserByUsername(verify.getUsername());
+                System.out.println(verify.getUsername());
+                String username = verify.getUsername();
+
+                UserDetailsImpl user = (UserDetailsImpl) userService.loadUserByUsername(username);
                 return new UsernamePasswordAuthenticationToken(
                         user, user.getAuthorities()
                 );
             }else{
+                request.setAttribute("exception",  "refresh token expired");
                 throw new TokenExpiredException("refresh token expired");
             }
         }
@@ -73,8 +83,8 @@ public class JWTLoginFilter extends UsernamePasswordAuthenticationFilter {
         response.setHeader("refresh_token", JWTUtil.makeRefreshToken(user));
         response.setHeader(HttpHeaders.AUTHORIZATION, "Bearer "+JWTUtil.makeAuthToken(user));
         response.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-        response.getOutputStream().write(objectMapper.writeValueAsBytes(user));
-        VerifyResult verifyResult = VerifyResult.builder().access(access).refresh(refresh).build();
+        //response.getOutputStream().write(objectMapper.registerModule(new JavaTimeModule()).writeValueAsBytes(user));
+        VerifyResult verifyResult = VerifyResult.builder().success(true).username(user.getUsername()).access(access).refresh(refresh).build();
         response.getOutputStream().write(objectMapper.writeValueAsBytes(verifyResult));
     }
 }

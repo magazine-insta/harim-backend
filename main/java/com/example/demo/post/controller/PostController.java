@@ -2,25 +2,33 @@ package com.example.demo.post.controller;
 
 
 
+import com.example.demo.config.JWTUtil;
 import com.example.demo.config.exception.BaseException;
 import com.example.demo.post.dto.DeleteRes;
 import com.example.demo.post.dto.PostReq;
 import com.example.demo.post.dto.PostRes;
 import com.example.demo.post.dto.PostResSingle;
 import com.example.demo.post.service.PostService;
+import com.example.demo.post.service.StreamingService;
 import com.example.demo.user.domain.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Mono;
 
+import javax.security.sasl.AuthenticationException;
+import java.nio.file.attribute.UserPrincipal;
+import java.security.Principal;
 import java.security.Security;
 import java.util.List;
 
@@ -32,6 +40,7 @@ import static com.example.demo.config.exception.BaseResponseStatus.LOGINCHECK;
 public class PostController {
     AnonymousAuthenticationFilter anonymousAuthenticationFilter;
     private final PostService postService;
+    private final JWTUtil jwtUtil;
 
     @GetMapping("/api/post")
     public List<PostRes> getPosts(@AuthenticationPrincipal UserDetailsImpl userDetails){
@@ -40,17 +49,20 @@ public class PostController {
     }
 
     @GetMapping("/api/post/{postId}")
-    public PostResSingle getPost(@PathVariable Long postId, @AuthenticationPrincipal UserDetailsImpl userDetails){
+    public PostResSingle getPost(@PathVariable Long postId, @AuthenticationPrincipal UserDetailsImpl userDetails) throws Exception {
+
+
 //        if (userDetails == null){
 //            throw new Exception("로그인 필요");
 //        }
-
-        try {
-            return postService.getPost(userDetails.getUsername(), postId);
-        } catch (BaseException e) {
-            e.printStackTrace();
-        }
-        return null;
+        System.out.println(userDetails.getUsername());
+        return postService.getPost(userDetails.getUsername(), postId);
+//        try {
+//            return postService.getPost(userDetails.getUsername(), postId);
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//        return null;
     }
 
 //    @PostMapping(value = "/api/post", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -95,14 +107,34 @@ public class PostController {
         return "성공";
     }
 
+
     @SneakyThrows
     @PutMapping("/api/post/{postId}/like")
     public void likePost(@PathVariable Long postId, @AuthenticationPrincipal UserDetailsImpl userDetails){
         if (userDetails == null){
-            throw new BaseException(LOGINCHECK);
+            throw new IllegalStateException("로그인 필요");
         }
+
         postService.like(userDetails.getUsername(), postId);
 
     }
+
+
+
+
+
+    //////
+    private final StreamingService streamingService;
+    @GetMapping(value = "video/{title}", produces = "video/mp4")
+    public Mono<Resource> getVideos(@PathVariable String title, @RequestHeader("Range") String range) {
+        System.out.println("range in bytes() : " + range);
+        return streamingService.getVideo(title);
+    }
+
+
+
+
+
+
 
 }

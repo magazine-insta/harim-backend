@@ -12,19 +12,32 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@EnableWebSecurity
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
+
+@EnableWebSecurity(debug = true)
 @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class WebConfig extends WebSecurityConfigurerAdapter{
+
+
+
 
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
@@ -42,24 +55,57 @@ public class WebConfig extends WebSecurityConfigurerAdapter{
 
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        JWTLoginFilter loginFilter = new JWTLoginFilter(authenticationManager());
+        JWTLoginFilter loginFilter = new JWTLoginFilter(authenticationManager(), userService);
         JWTCheckFilter checkFilter = new JWTCheckFilter(authenticationManager(), userService);
 
-//        CustomLoginFilter filter = new CustomLoginFilter(authenticationManager());
-//        filter.setFilterProcessesUrl("/api/login");
-//
-//        filter.setAuthenticationSuccessHandler(successHandler());
-//        filter.setAuthenticationFailureHandler(failureHandler());
-//        filter.afterPropertiesSet();
+        CustomLoginFilter filter = new CustomLoginFilter(authenticationManager());
+        filter.setFilterProcessesUrl("/api/login");
+
+        filter.setAuthenticationSuccessHandler(successHandler());
+        filter.setAuthenticationFailureHandler(failureHandler());
+        filter.afterPropertiesSet();
 
         http
                 .csrf().disable()
                 .sessionManagement(session->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+                .formLogin().disable()
+//                .failureHandler(failureHandler())
+//                .and()
+
                 .addFilterAt(loginFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAt(checkFilter, BasicAuthenticationFilter.class)
-        ;
+                .exceptionHandling()
+                .authenticationEntryPoint(new AuthenticationEntryPoint() {
+
+                    @Override
+                    public void commence(HttpServletRequest request, HttpServletResponse response,
+                                         AuthenticationException authException) throws IOException, ServletException {
+                        String exception = (String)request.getAttribute("exception");
+                        //String errorCode = (String)request.getAttribute("errorCode");
+
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.setStatus(403);
+
+                        if (exception == null){
+                            response.getWriter().println("{ \"message\" : \"" + "로그인 하세요"
+                                    + "\", \"code\" : \"" + "required login"
+                                    + "\", \"status\" : " + 404
+                                    + ", \"errors\" : [ ] }");
+                        }else{
+
+                        response.getWriter().println("{ \"message\" : \"" + exception
+                                + "\", \"code\" : \"" + "expired token"
+                                + "\", \"status\" : " + 404
+                                + ", \"errors\" : [ ] }");
+                        }
+                    }});
+
+
+
+
 
 
         http.csrf()
@@ -67,7 +113,7 @@ public class WebConfig extends WebSecurityConfigurerAdapter{
         http    //.addFilterAt(filter, UsernamePasswordAuthenticationFilter.class)
 
                 .authorizeRequests(request->
-                        request.antMatchers("/api/login/", "/api/loginf").permitAll()
+                        request.antMatchers("/api/login/", "/api/loginf", "/errorjwt").permitAll()
 
                                 .antMatchers("/api/register").permitAll()
                                 .antMatchers(HttpMethod.GET,"/api/post").permitAll()
