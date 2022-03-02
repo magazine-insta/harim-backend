@@ -1,16 +1,17 @@
 package com.example.demo.post.service;
 
-import com.example.demo.config.exception.BaseException;
 import com.example.demo.post.controller.AWSComponent;
 import com.example.demo.post.domain.*;
 import com.example.demo.post.dto.PostReq;
 import com.example.demo.post.dto.PostRes;
-import com.example.demo.post.dto.PostResSingle;
 import com.example.demo.user.domain.User;
 import com.example.demo.user.domain.UserDetailsImpl;
 import com.example.demo.user.domain.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,12 +21,12 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.example.demo.config.exception.BaseResponseStatus.CANNOT_FIND_POSTID;
 import static org.apache.http.entity.ContentType.*;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class PostServiceImpl implements PostService{
     private final PostRepository postRepository;
     private final UserRepository userRepository;
@@ -35,6 +36,8 @@ public class PostServiceImpl implements PostService{
     public String bucket;
 
     private final AWSComponent fileStore;
+
+
 
 //
 //    @Override
@@ -92,33 +95,41 @@ public class PostServiceImpl implements PostService{
     }
 
     @Override
-    public void uploadPost2(PostReq postReq, String username) {
+    @CacheEvict(cacheNames = "post", key = "#username", allEntries = true) // , key = "#username")
+    public Post uploadPost2(PostReq postReq, String username) {
         Optional<User> user = userRepository.findByUserId(username);
         Post post = Post.builder()
+                .layoutType(postReq.getLayoutType())
                 .user(user.get())
                 .createdAt(LocalDateTime.now())
                 .contentText(postReq.getContents())
-                .contentImg(postReq.getContents_image()).build();
-        postRepository.save(post);
+                .contentImg(postReq.getImageUrl()).build();
+        return postRepository.save(post);
     }
 
     @Override
-    public PostRes updatePost(Long id, PostReq postReq) throws Exception {
+    @CacheEvict(cacheNames = "post", key = "#username.username",  allEntries = true)//, key = "#username") //(allEntries = true)
+    public Optional<Post> updatePost(Long id, PostReq postReq, UserDetailsImpl username) throws Exception {
 
         Optional<Post> post = postRepository.findById(id);
 //        if (postReq.getUser_id() != post.get().getUser().getUserId()){
 //            throw new Exception("접근 할 수 없다");
 //        }
+
+        if (postReq.getLayoutType() != null){
+            post.get()
+                    .setLayoutType(postReq.getLayoutType());
+        }
         if (postReq.getContents() != null){
         post.get()
                 .setContentText(postReq.getContents());
             }
-        if(postReq.getContents_image() != null){
+        if(postReq.getImageUrl() != null){
             //String s3Url = uploadImg(postReq.getContents_image()).toString(); // MultipartFile
-            post.get().setContentImg(postReq.getContents_image());
+            post.get().setContentImg(postReq.getImageUrl());
         }
 
-        return null;
+        return post;
     }
 
     @Override
@@ -144,68 +155,99 @@ public class PostServiceImpl implements PostService{
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "post", key = "#username.username")
     public List<PostRes> getAllPosts(UserDetailsImpl username) {
         List<Post> posts = (List<Post>) postRepository.findAll();
-        if (username != null){
-            Long userId = userRepository.findByUserId(username.getUsername())
-                    .get().getId();
+        log.info("DB connect");
 
-            return posts.stream()
-                    .map(post -> {
-                        Optional<Likes> like = likesRepository.findIdByUserAndPost(userId, post.getId());
+        Long userId = userRepository.findByUserId(username.getUsername())
+                .get().getId();
 
-                        return PostRes.builder()
-                                .post_id(post.getId())
-                                .nickname(post.getUser().getNickname())
-                                .use_image(post.getUser().getUserImg())
-                                .created_at(post.getCreatedAt())
-                                .contents_text(post.getContentText())
-                                .contents_image(post.getContentImg())
-                                .like((like.isEmpty()) ? false : true)
-                                .build();
-                    })
-                    .collect(Collectors.toList());
-        } else {
-            return posts.stream()
-                    .map(post -> {
+        return posts.stream()
+                .map(post -> {
+                    Optional<Likes> like = likesRepository.findIdByUserAndPost(userId, post.getId());
+
+                    return PostRes.builder()
+                            .contents(post.getContentText())
+                            .createdAt(post.getCreatedAt())
+                            .imageUrl(post.getContentImg())
+                            .isMe(post.getUser().getId().equals(userId))
+                            .layoutType(post.getLayoutType())
+                            .likeCnt(likesRepository.findByPost(post.getId()).size())
+
+                            .nickname(post.getUser().getNickname())
+                            //.use_image(post.getUser().getUserImg())
+                            .postId(Math.toIntExact(post.getId()))
+                            .userLiked((like.isEmpty()) ? false : true)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "post") // expire
+    public List<PostRes> getAllPostsNoUser(UserDetailsImpl username) {
+        List<Post> posts = (List<Post>) postRepository.findAll();
+        log.info("DB connect");
 
 
-                        return PostRes.builder()
-                                .post_id(post.getId())
-                                .nickname(post.getUser().getNickname())
-                                .use_image(post.getUser().getUserImg())
-                                .created_at(post.getCreatedAt())
-                                .contents_text(post.getContentText())
-                                .contents_image(post.getContentImg())
-                                .like(false)
-                                .build();
-                    })
-                    .collect(Collectors.toList());
-        }
+        return posts.stream()
+                .map(post -> {
+                    List<Likes> likesList = likesRepository.findByPost(post.getId());
+                    int likeCnt = likesRepository.findByPost(post.getId()).size();
+
+
+
+
+                    return PostRes.builder()
+                            .contents(post.getContentText())
+                            .createdAt(post.getCreatedAt())
+                            .imageUrl(post.getContentImg())
+                            .isMe(false)
+                            .layoutType(post.getLayoutType())
+                            .likeCnt(likeCnt)
+
+                            .nickname(post.getUser().getNickname())
+                            //.use_image(post.getUser().getUserImg())
+                            .postId(Math.toIntExact(post.getId()))
+                            .userLiked(false)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
     }
 
 
     @Override
     @Transactional(readOnly=true)
-    public PostResSingle getPost(String username, Long postId) throws BaseException {
+    @Cacheable(value = "post", key = "#username + '::' + #postId")
+    public PostRes getPost(String username, Long postId) {
+
+
         Optional<Post> post = postRepository.findById(postId);
         Long userId = userRepository.findByUserId(username)
                 .get().getId();
         Optional<Likes> like = likesRepository.findIdByUserAndPost(userId, postId);
 
-        if (post == null){
-            throw new BaseException(CANNOT_FIND_POSTID);
+        if (post.isEmpty()){
+            throw new IllegalArgumentException("포스트를 찾을 수 없습니다");
         }
+        Post post1 = post.get();
 
-        return PostResSingle.builder()
-                .post_id(postId)
-                .nickname(post.get().getUser().getNickname())
-                //.use_image(post.get().getUser().getUserImg())
-                .profile_image(post.get().getUser().getUserImg())
-                .created_at(post.get().getCreatedAt())
-                .contents_text(post.get().getContentText())
-                .contents_image(post.get().getContentImg())
-                .like((like.isEmpty()) ? false : true)
+        return PostRes.builder()
+                .contents(post1.getContentText())
+                .createdAt(post1.getCreatedAt())
+                .imageUrl(post1.getContentImg())
+                .isMe(post1.getUser().getId().equals(userId))
+                .layoutType(post1.getLayoutType())
+                .likeCnt(likesRepository.findByPost(post1.getId()).size())
+
+                .nickname(post1.getUser().getNickname())
+                //.use_image(post.getUser().getUserImg())
+                .postId(Math.toIntExact(post1.getId()))
+                .userLiked((like.isEmpty()) ? false : true)
                 .build();
     }
 
@@ -217,6 +259,7 @@ public class PostServiceImpl implements PostService{
     }
 
     @Override
+    @CacheEvict(cacheNames = "post", key = "#username.username",  allEntries = true)
     public void like(String username, java.lang.Long postId) {
         Optional<User> user = userRepository.findByUserId(username);
 
